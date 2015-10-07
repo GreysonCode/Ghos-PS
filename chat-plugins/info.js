@@ -261,7 +261,9 @@ var commands = exports.commands = {
 					"Height": pokemon.heightm + " m",
 					"Weight": pokemon.weightkg + " kg <em>(" + weighthit + " BP)</em>",
 					"Dex Colour": pokemon.color,
-					"Egg Group(s)": pokemon.eggGroups.join(", ")
+					"Egg Group(s)": pokemon.eggGroups.join(", "),
+					"SDP": pokemon.saishidoupoints,
+					"MP": pokemon.metapoints
 				};
 				if (!pokemon.evos.length) {
 					details["<font color=#585858>Does Not Evolve</font>"] = "";

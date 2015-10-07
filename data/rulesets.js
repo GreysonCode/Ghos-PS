@@ -692,6 +692,482 @@ exports.BattleFormats = {
 			}
 		}
 	},
+	saishidouteam: {
+		effectType: 'Rule',
+		onStart: function () {
+			this.add('rule', 'Saishidou Team Clause: Limit team value to 36 SDP; enforce Saishidou ruled moves and items.');
+		},
+		
+		//Ensures that the limit rules are enforced as well as having all 6 slots filled on a team. 
+		validateTeam: function (team, format) {
+			var problems = [];
+			
+			//Deals with team SDP limit of 36 
+			var totalLimit = 36;
+			var totalSDP = 0;
+
+			//Deals with individual limits on Pokemon
+			var individualLimit = 12;
+			var individualSDP = 0;
+
+			//Deals with Partial-Trapping, Trapping, Self-Rotation, and Protection moves
+			var ruledMoveSDP = 2;
+			var ruledMoveCount = 0;
+			var ruledMoveTotalSDP = 0;
+			
+			// Deals with the Eviolite and Focus Sash multiplier
+			var ruledItemMultiplier = 1.5;
+			var ruledItemTotal = 0;
+			
+			// Loop through all Pokemon in the team
+			for (var i = 0; i < team.length; i++) {
+				if (team.length !== 6) {
+					problems.push("You must have 6 Pokemon on a team to participate.");
+				}
+				var itemTemplate = this.getTemplate(this.getItem(team[i].item).megaStone);
+				var pokemonTemplate = this.getTemplate(team[i].species);
+
+				// Check if the pokemon is a mega and fetch the template if so
+				if (pokemonTemplate.baseSpecies == itemTemplate.baseSpecies) {
+					pokemonTemplate = this.getTemplate(itemTemplate);
+				}
+
+				individualSDP += pokemonTemplate.saishidoupoints;
+
+				// Check if the pokemon is legal (i.e. released and available in the current generation games)
+				if (individualSDP > individualLimit) {
+					problems.push(pokemonTemplate.species + " is over " + individualLimit + " SDP.");
+				}
+
+				// If the pokemon is holding an eviolite, multiply the base SDP by the eviolite multiplier, rounding up
+				if (team[i].item == "Eviolite" || team[i].item == "Focus Sash") {
+					var SDPWithRuledItem = Math.ceil(pokemonTemplate.saishidoupoints * ruledItemMultiplier);
+					// Adds SDPWithRuledItem to individual SDP and to the evioliteTotal
+					ruledItemTotal += (SDPWithRuledItem - pokemonTemplate.saishidoupoints);
+					individualSDP += (SDPWithRuledItem - pokemonTemplate.saishidoupoints);
+					
+					// If the SDP is over the individual pokeon limit
+					if (SDPWithRuledItem > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " SDP.");
+						problems.push(pokemonTemplate.species + " has an SDP of " + individualSDP + ".");
+					}
+				}
+
+				// Checks through the set of the current Pokemon for the ruled moves
+
+				// Protection moves
+				if (team[i].moves.indexOf('Protect') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Detect') > -1) ruledMoveCount++;	
+				if (team[i].moves.indexOf('Wide Guard') > -1) ruledMoveCount++;	
+				if (team[i].moves.indexOf('Quick Guard') > -1) ruledMoveCount++;	
+				if (team[i].moves.indexOf('Mat Block') > -1) ruledMoveCount++;	
+				if (team[i].moves.indexOf('King\'s Shield') > -1) ruledMoveCount++;	
+				if (team[i].moves.indexOf('Spiky Shield') > -1) ruledMoveCount++;		
+				
+				// Self-Rotation moves
+				if (team[i].moves.indexOf('Volt Switch') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('U-turn') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Baton Pass') > -1) ruledMoveCount++;
+				
+				// Partial-Trapping moves
+				if (team[i].moves.indexOf('Bind') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Clamp') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Fire Spin') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Infestation') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Magma Storm') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Sand Tomb') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Whirlpool') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Wrap') > -1) ruledMoveCount++;
+				
+				// Trapping moves
+				if (team[i].moves.indexOf('Block') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Fairy Lock') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Mean Look') > -1) ruledMoveCount++;
+				if (team[i].moves.indexOf('Spider Web') > -1) ruledMoveCount++;	
+				
+				// Add the ruled move SDP to the total SDP
+				if (ruledMoveCount > 0) {
+					ruledMoveTotalSDP += (ruledMoveCount * ruledMoveSDP);
+					individualSDP += (ruledMoveCount * ruledMoveSDP);
+					if (individualSDP > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " SDP.");
+						problems.push(pokemonTemplate.species + " has " + individualSDP + " SDP.");
+					}
+				}
+
+				//Add individual SDP to total
+				totalSDP += individualSDP;
+
+				//Reset individual SDP for the next Pokemon on the team
+				individualSDP = 0;
+
+				//Reset ruled move counter for the next Pokemon on the team
+				ruledMoveCount = 0;
+
+			}
+
+			// Check total SDP against the total limit
+			if (totalSDP > totalLimit) {
+				problems.push("You are limited to a total of " + totalLimit + " SDP for all Pokémon.");
+				problems.push("You have total SDP of " + totalSDP + ".");
+				problems.push("You have " + ruledItemTotal + " SDP added from Eviolite and/or Focus Sash.");
+				problems.push("You have " + (ruledMoveTotalSDP / 2) + " trapping/partial-trapping/protection/self-rotation moves on your team, adding " + ruledMoveTotalSDP + " SDP.")
+			}
+			
+			return problems;
+		}
+	},
+	saishidoueffect: {
+        effectType: 'Rule',
+        onStart: function () {
+            this.add('rule', 'Saishidou Effect: Limit consecutive turns of every Pokemon by SDP value.');
+        },
+		
+		onSwitchInPriority: 1,
+		onSwitchIn: function (pokemon) {
+			if (pokemon.template.saishidoupoints === 12 || pokemon.template.saishidoupoints === 11) {
+				this.add('-message', pokemon.species + ': SDP of ' + pokemon.template.saishidoupoints + ' and has at most 1 turn in battle!');	
+			}
+			if (pokemon.template.saishidoupoints === 10 || pokemon.template.saishidoupoints === 9) {
+				this.add('-message', pokemon.species + ': SDP of ' + pokemon.template.saishidoupoints + ' and has at most 2 consecutive turns in battle!');	
+			}
+			if (pokemon.template.saishidoupoints === 8 || pokemon.template.saishidoupoints === 7) {
+				this.add('-message', pokemon.species + ': SDP of ' + pokemon.template.saishidoupoints + ' and has at most 3 consecutive turns in battle!');	
+			}
+			if (pokemon.template.saishidoupoints === 6 || pokemon.template.saishidoupoints === 5) {
+				this.add('-message', pokemon.species + ': SDP of ' + pokemon.template.saishidoupoints + ' and has at most 4 consecutive turns in battle!');	
+			}
+			if (pokemon.template.saishidoupoints === 4 || pokemon.template.saishidoupoints === 3) {
+				this.add('-message', pokemon.species + ': SDP of ' + pokemon.template.saishidoupoints + ' and has at most 5 consecutive turns in battle!');	
+			}
+			if (pokemon.template.saishidoupoints === 2 || pokemon.template.saishidoupoints === 1) {
+				this.add('-message', pokemon.species + ': SDP of ' + pokemon.template.saishidoupoints + ' and has at most 6 consecutive turns in battle!');	
+			}
+		},
+       
+        onResidual: function (battle) {
+			for (var i = 0; i < battle.sides.length; i++) {
+				var side = battle.sides[i];
+				for (var j = 0; j < side.active.length; j++) {
+					var pokemon = side.active[j];
+
+					var sdp = pokemon.template.saishidoupoints;
+
+					// Checks for Ruled Items
+					if (pokemon.hasItem('eviolite') || pokemon.hasItem('focussash')) {
+						var SDPWithRuledItem = Math.ceil(sdp * 1.5);
+						sdp += SDPWithRuledItem - sdp;
+					}
+
+					// Checks for Ruled Moves
+					// Self-Rotation
+					if (pokemon.hasMove('batonpass'))	sdp += 2;
+					if (pokemon.hasMove('u-turn'))	sdp += 2;
+					if (pokemon.hasMove('voltswitch'))	sdp += 2;
+					// Trapping
+					if (pokemon.hasMove('block'))	sdp += 2;
+					if (pokemon.hasMove('fairylock'))	sdp += 2;
+					if (pokemon.hasMove('meanlook'))	sdp += 2;
+					if (pokemon.hasMove('spiderweb'))	sdp += 2;
+					// Partial-Trapping
+					if (pokemon.hasMove('bind'))	sdp += 2;
+					if (pokemon.hasMove('clamp'))	sdp += 2;
+					if (pokemon.hasMove('firespin'))	sdp += 2;
+					if (pokemon.hasMove('infestation'))	sdp += 2;
+					if (pokemon.hasMove('magmastorm'))	sdp += 2;
+					if (pokemon.hasMove('sandtomb'))	sdp += 2;
+					if (pokemon.hasMove('whirlpool'))	sdp += 2;
+					if (pokemon.hasMove('wrap'))	sdp += 2;
+					// Protection
+					if (pokemon.hasMove('detect'))	sdp += 2;
+					if (pokemon.hasMove('king\'sshield'))	sdp += 2;
+					if (pokemon.hasMove('matblock'))	sdp += 2;
+					if (pokemon.hasMove('protect'))	sdp += 2;
+					if (pokemon.hasMove('quickguard'))	sdp += 2;
+					if (pokemon.hasMove('spikyshield'))	sdp += 2;
+					if (pokemon.hasMove('wideguard'))	sdp += 2;
+
+					/*************************
+					 Turn Limit Battle Engine
+					*************************/
+					if (sdp === 12 || sdp === 11) {
+						if (pokemon.activeTurns >= 1) {
+							pokemon.faint();
+						}
+					}
+					if (sdp === 10 || sdp === 9) {
+						if (pokemon.activeTurns === 1) {
+							this.add('message', pokemon.species + ' has 1 turn left before fainting!');
+						} else if (pokemon.activeTurns >= 2) {
+							pokemon.faint();
+						}
+					}
+					if (sdp === 8 || sdp === 7) {
+						if (pokemon.activeTurns === 1 || pokemon.activeTurns === 2) {
+							this.add('message', pokemon.species + ' has ' + (3 - pokemon.activeTurns) + ' turn(s) left before fainting!');
+						} else if (pokemon.activeTurns >= 3) {
+							pokemon.faint();
+						}
+					}
+					if (sdp === 6 || sdp === 5) {
+						if (pokemon.activeTurns === 1 || pokemon.activeTurns === 2 || pokemon.activeTurns === 3) {
+							this.add('message', pokemon.species + ' has ' + (4 - pokemon.activeTurns) + ' turn(s) left before fainting!');
+						} else if (pokemon.activeTurns >= 4) {
+							pokemon.faint();
+						}
+					}
+					if (sdp === 4 || sdp === 3) {
+						if (pokemon.activeTurns === 1 || pokemon.activeTurns === 2 || pokemon.activeTurns === 3 || pokemon.activeTurns === 4) {
+							this.add('message', pokemon.species + ' has ' + (5 - pokemon.activeTurns) + ' turn(s) left before fainting!');
+						} else if (pokemon.activeTurns >= 5) {
+							pokemon.faint();
+						}
+					}
+					if (sdp === 2 || sdp === 1) {
+						if (pokemon.activeTurns === 1 || pokemon.activeTurns === 2 || pokemon.activeTurns === 3 || pokemon.activeTurns === 4 || pokemon.activeTurns === 5) {
+							this.add('message', pokemon.species + ' has ' + (6 - pokemon.activeTurns) + ' turn(s) left before fainting!');
+						} else if (pokemon.activeTurns >= 6) {
+							pokemon.faint();
+						}
+					}
+				}
+			}
+        }
+	},
+	54mp: {
+		effectType: 'Rule',
+		onStart: function () {
+			this.add('rule', '54 Meta Points: Limit team value to 54; enforce MP ruled moves and items.');
+		},
+
+		validateTeam: function (team, format) {
+			var problems = [];
+			
+			var totalLimit = 54;
+			var totalMP = 0;
+
+			var individualLimit = 12;
+			var individualMP = 0;
+
+			var ruledMoveMP = 2;
+			var ruledMoveCount = 0;
+			var ruledMoveTotalSDP = 0;
+			
+			var ruledItemMultiplier = 1.5;
+			var ruledItemTotal = 0;
+			
+			for (var i = 0; i < team.length; i++) {
+				if (team.length !== 6) {
+					problems.push("You must have 6 Pokemon on a team to participate.");
+				}
+				var itemTemplate = this.getTemplate(this.getItem(team[i].item).megaStone);
+				var pokemonTemplate = this.getTemplate(team[i].species);
+
+				if (pokemonTemplate.baseSpecies == itemTemplate.baseSpecies) {
+					pokemonTemplate = this.getTemplate(itemTemplate);
+				}
+
+				individualMP += pokemonTemplate.metapoints;
+
+				if (individualMP > individualLimit) {
+					problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+				}
+
+				if (team[i].item == "Eviolite") {
+					var MPWithRuledItem = Math.ceil(pokemonTemplate.metapoints * ruledItemMultiplier);
+					ruledItemTotal += (MPWithRuledItem - pokemonTemplate.metapoints);
+					individualMP += (MPWithRuledItem - pokemonTemplate.metapoints);
+					
+					if (MPWithRuledItem > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+						problems.push(pokemonTemplate.species + " has an MP of " + individualMP + ".");
+					}
+				}
+
+				if (team[i].moves.indexOf('Baton Pass') > -1) ruledMoveCount++;
+
+				if (ruledMoveCount > 0) {
+					ruledMoveTotalMP += (ruledMoveCount * ruledMoveMP);
+					individualMP += (ruledMoveCount * ruledMoveMP);
+					if (individualSDP > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+						problems.push(pokemonTemplate.species + " has " + individualMP + " MP.");
+					}
+				}
+
+				totalSDP += individualSDP;
+
+				individualSDP = 0;
+
+				ruledMoveCount = 0;
+			}
+
+			if (totalMP > totalLimit) {
+				problems.push("You are limited to a total of " + totalLimit + " MP for all Pokémon.");
+				problems.push("You have total MP of " + totalMP + ".");
+				problems.push("You have " + ruledItemTotal + " MP added from Eviolite.");
+				problems.push("You have " + (ruledMoveTotalMP / 2) + " cases of Baton Pass on your team, adding " + ruledMoveTotalMP + " MP.")
+			}
+			
+			return problems;
+		}
+	},
+	36mp: {
+		effectType: 'Rule',
+		onStart: function () {
+			this.add('rule', '36 Meta Points: Limit team value to 36; enforce MP ruled moves and items.');
+		},
+
+		validateTeam: function (team, format) {
+			var problems = [];
+			
+			var totalLimit = 36;
+			var totalMP = 0;
+
+			var individualLimit = 9;
+			var individualMP = 0;
+
+			var ruledMoveMP = 2;
+			var ruledMoveCount = 0;
+			var ruledMoveTotalSDP = 0;
+			
+			var ruledItemMultiplier = 1.5;
+			var ruledItemTotal = 0;
+			
+			for (var i = 0; i < team.length; i++) {
+				if (team.length !== 6) {
+					problems.push("You must have 6 Pokemon on a team to participate.");
+				}
+				var itemTemplate = this.getTemplate(this.getItem(team[i].item).megaStone);
+				var pokemonTemplate = this.getTemplate(team[i].species);
+
+				if (pokemonTemplate.baseSpecies == itemTemplate.baseSpecies) {
+					pokemonTemplate = this.getTemplate(itemTemplate);
+				}
+
+				individualMP += pokemonTemplate.metapoints;
+
+				if (individualMP > individualLimit) {
+					problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+				}
+
+				if (team[i].item == "Eviolite") {
+					var MPWithRuledItem = Math.ceil(pokemonTemplate.metapoints * ruledItemMultiplier);
+					ruledItemTotal += (MPWithRuledItem - pokemonTemplate.metapoints);
+					individualMP += (MPWithRuledItem - pokemonTemplate.metapoints);
+					
+					if (MPWithRuledItem > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+						problems.push(pokemonTemplate.species + " has an MP of " + individualMP + ".");
+					}
+				}
+
+				if (team[i].moves.indexOf('Baton Pass') > -1) ruledMoveCount++;
+
+				if (ruledMoveCount > 0) {
+					ruledMoveTotalMP += (ruledMoveCount * ruledMoveMP);
+					individualMP += (ruledMoveCount * ruledMoveMP);
+					if (individualSDP > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+						problems.push(pokemonTemplate.species + " has " + individualMP + " MP.");
+					}
+				}
+
+				totalSDP += individualSDP;
+
+				individualSDP = 0;
+
+				ruledMoveCount = 0;
+			}
+
+			if (totalMP > totalLimit) {
+				problems.push("You are limited to a total of " + totalLimit + " MP for all Pokémon.");
+				problems.push("You have total MP of " + totalMP + ".");
+				problems.push("You have " + ruledItemTotal + " MP added from Eviolite.");
+				problems.push("You have " + (ruledMoveTotalMP / 2) + " cases of Baton Pass on your team, adding " + ruledMoveTotalMP + " MP.")
+			}
+			
+			return problems;
+		}
+	},
+	18mp: {
+		effectType: 'Rule',
+		onStart: function () {
+			this.add('rule', '18 Meta Points: Limit team value to 18; enforce MP ruled moves and items.');
+		},
+
+		validateTeam: function (team, format) {
+			var problems = [];
+			
+			var totalLimit = 18;
+			var totalMP = 0;
+
+			var individualLimit = 6;
+			var individualMP = 0;
+
+			var ruledMoveMP = 2;
+			var ruledMoveCount = 0;
+			var ruledMoveTotalSDP = 0;
+			
+			var ruledItemMultiplier = 1.5;
+			var ruledItemTotal = 0;
+			
+			for (var i = 0; i < team.length; i++) {
+				if (team.length !== 6) {
+					problems.push("You must have 6 Pokemon on a team to participate.");
+				}
+				var itemTemplate = this.getTemplate(this.getItem(team[i].item).megaStone);
+				var pokemonTemplate = this.getTemplate(team[i].species);
+
+				if (pokemonTemplate.baseSpecies == itemTemplate.baseSpecies) {
+					pokemonTemplate = this.getTemplate(itemTemplate);
+				}
+
+				individualMP += pokemonTemplate.metapoints;
+
+				if (individualMP > individualLimit) {
+					problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+				}
+
+				if (team[i].item == "Eviolite") {
+					var MPWithRuledItem = Math.ceil(pokemonTemplate.metapoints * ruledItemMultiplier);
+					ruledItemTotal += (MPWithRuledItem - pokemonTemplate.metapoints);
+					individualMP += (MPWithRuledItem - pokemonTemplate.metapoints);
+					
+					if (MPWithRuledItem > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+						problems.push(pokemonTemplate.species + " has an MP of " + individualMP + ".");
+					}
+				}
+
+				if (team[i].moves.indexOf('Baton Pass') > -1) ruledMoveCount++;
+
+				if (ruledMoveCount > 0) {
+					ruledMoveTotalMP += (ruledMoveCount * ruledMoveMP);
+					individualMP += (ruledMoveCount * ruledMoveMP);
+					if (individualSDP > individualLimit) {
+						problems.push(pokemonTemplate.species + " is over " + individualLimit + " MP.");
+						problems.push(pokemonTemplate.species + " has " + individualMP + " MP.");
+					}
+				}
+
+				totalSDP += individualSDP;
+
+				individualSDP = 0;
+
+				ruledMoveCount = 0;
+			}
+
+			if (totalMP > totalLimit) {
+				problems.push("You are limited to a total of " + totalLimit + " MP for all Pokémon.");
+				problems.push("You have total MP of " + totalMP + ".");
+				problems.push("You have " + ruledItemTotal + " MP added from Eviolite.");
+				problems.push("You have " + (ruledMoveTotalMP / 2) + " cases of Baton Pass on your team, adding " + ruledMoveTotalMP + " MP.")
+			}
+			
+			return problems;
+		}
+	},
 	megarayquazaclause: {
 		effectType: 'Rule',
 		onStart: function () {
